@@ -6,9 +6,9 @@ import (
 )
 
 type Screen struct {
-	lines                []*Line
-	width, maxHeight     int
-	positionX, positionY int
+	lines                   []*Line
+	desiredWidth, maxHeight int
+	positionX, positionY    int
 
 	parser EscapeSequenceParser
 
@@ -20,16 +20,16 @@ type Screen struct {
 
 func NewScreen(width int, height int) *Screen {
 	screen := &Screen{
-		width:     width,
-		maxHeight: height,
-		lines:     []*Line{NewLine(0)},
+		desiredWidth: width,
+		maxHeight:    height,
+		lines:        []*Line{NewLine(0)},
 	}
 	screen.parser = NewEscapeSequenceParser(screen)
 	if screen.maxHeight <= 0 {
 		screen.maxHeight = 1
 	}
-	if screen.width <= 0 {
-		screen.width = 1
+	if screen.desiredWidth <= 0 {
+		screen.desiredWidth = 1
 	}
 	return screen
 }
@@ -83,6 +83,8 @@ func (s *Screen) sendLineToScrollbackBuffer(line *Line) {
 		previousCharacter = character
 	}
 
+	// TODO: don't reset the last line, as the child might expect it to be set
+	//       do something similar to how '\n' is handled
 	if didSetSGR {
 		// Reset SGR
 		s.appendToScrollback("\033[0m")
@@ -125,6 +127,9 @@ func (s *Screen) nextLine() {
 	} else {
 		lastIndex := s.lines[len(s.lines)-1].index
 		s.lines = append(s.lines, NewLine(lastIndex+1))
+		// TODO: positionY being in infinite-space coordinates is wrong. Doesn't simplify anything, except for this function
+		//       (arguably not even that)
+		s.positionY++
 	}
 
 	// If there's more than s.maxHeight lines, send the first line to the scrollback buffer and remove it
@@ -156,12 +161,14 @@ func (s *Screen) prevCharacter() {
 }
 
 func (s *Screen) setCurrentCharacterTo(r rune) {
-	s.currentLine().characterAt(s.positionX).rune = r
+	currentCharacter := s.currentLine().characterAt(s.positionX)
+
+	currentCharacter.rune = r
 	if s.currentSGRs == nil {
-		s.currentLine().characterAt(s.positionX).clearSGR()
+		currentCharacter.clearSGR()
 	} else {
 		for _, sgr := range s.currentSGRs {
-			s.currentLine().characterAt(s.positionX).addSGR(sgr)
+			currentCharacter.addSGR(sgr)
 		}
 	}
 }
@@ -182,11 +189,9 @@ func (s *Screen) outRelativeMoveCursorVertical(howMany int) {
 }
 
 func (s *Screen) outRelativeMoveCursorHorizontal(howMany int) {
-	for i := 0; howMany > i; i++ {
-		s.nextCharacter()
-	}
-	for i := 0; howMany < i; i-- {
-		s.prevCharacter()
+	s.positionX += howMany
+	if s.positionX < 0 {
+		s.positionX = 0
 	}
 }
 
