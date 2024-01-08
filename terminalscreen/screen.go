@@ -22,7 +22,7 @@ func NewScreen(width int, height int) *Screen {
 	screen := &Screen{
 		desiredWidth: width,
 		maxHeight:    height,
-		lines:        []*Line{NewLine(0)},
+		lines:        []*Line{NewLine()},
 	}
 	screen.parser = NewEscapeSequenceParser(screen)
 	if screen.maxHeight <= 0 {
@@ -43,11 +43,7 @@ func (s *Screen) Resize(width, height int) {
 }
 
 func (s *Screen) currentLine() *Line {
-	return s.lines[s.positionY-s.lines[0].index]
-}
-
-func (s *Screen) firstLineIndex() int {
-	return s.lines[0].index
+	return s.lines[s.positionY]
 }
 
 func (s *Screen) currentScreenHeight() int {
@@ -109,7 +105,7 @@ func (s *Screen) End() {
 		s.appendToScrollback("\033[" + strconv.Itoa(-moveRightBy) + "D")
 	}
 
-	moveDownBy := s.currentScreenHeight() - s.positionYInVisibleScreenCoordinates() - 1
+	moveDownBy := s.currentScreenHeight() - s.positionY - 1
 	if moveDownBy > 0 {
 		s.appendToScrollback("\033[" + strconv.Itoa(moveDownBy) + "B")
 	} else if moveDownBy < 0 {
@@ -122,14 +118,10 @@ func (s *Screen) End() {
 func (s *Screen) nextLine() {
 	//log.Printf("call to Screen.nextLine()\n")
 
-	if s.positionYInVisibleScreenCoordinates() < s.currentScreenHeight()-1 {
+	if s.positionY < s.currentScreenHeight()-1 {
 		s.positionY++
 	} else {
-		lastIndex := s.lines[len(s.lines)-1].index
-		s.lines = append(s.lines, NewLine(lastIndex+1))
-		// TODO: positionY being in infinite-space coordinates is wrong. Doesn't simplify anything, except for this function
-		//       (arguably not even that)
-		s.positionY++
+		s.lines = append(s.lines, NewLine())
 	}
 
 	// If there's more than s.maxHeight lines, send the first line to the scrollback buffer and remove it
@@ -141,7 +133,7 @@ func (s *Screen) nextLine() {
 }
 
 func (s *Screen) prevLine() {
-	if s.positionY <= s.firstLineIndex() {
+	if s.positionY <= 0 {
 		// TODO: negative-index lines?
 		return
 	}
@@ -195,13 +187,13 @@ func (s *Screen) outRelativeMoveCursorHorizontal(howMany int) {
 	}
 }
 
-func (s *Screen) outAbsoluteMoveCursorVertical(y int) {
-	moveDownBy := y - s.positionYInVisibleScreenCoordinates()
+func (s *Screen) outAbsoluteMoveCursorVertical(targetY int) {
+	moveDownBy := targetY - s.positionY
 	s.outRelativeMoveCursorVertical(moveDownBy)
 }
 
-func (s *Screen) outAbsoluteMoveCursorHorizontal(x int) {
-	s.positionX = x
+func (s *Screen) outAbsoluteMoveCursorHorizontal(targetX int) {
+	s.positionX = targetX
 	if s.positionX < 0 {
 		s.positionX = 0
 	}
@@ -232,8 +224,4 @@ func (s *Screen) outSelectGraphicRenditionAttribute(sgr SelectGraphicRenditionAt
 
 func (s *Screen) appendToScrollback(str string) {
 	s.QueuedScrollbackOutput = append(s.QueuedScrollbackOutput, []byte(str)...)
-}
-
-func (s *Screen) positionYInVisibleScreenCoordinates() int {
-	return s.positionY - s.firstLineIndex()
 }

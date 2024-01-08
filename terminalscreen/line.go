@@ -1,15 +1,13 @@
 package terminalscreen
 
 type Line struct {
-	index int
-
 	// characters in a Line are represented as strings (and not runes) because we treat escape sequences as parts of
 	// their corresponding characters.
 	characters []Character
 }
 
-func NewLine(index int) *Line {
-	return &Line{index: index}
+func NewLine() *Line {
+	return &Line{}
 }
 
 func (l *Line) characterAt(i int) *Character {
